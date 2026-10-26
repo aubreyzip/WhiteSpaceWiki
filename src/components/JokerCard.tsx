@@ -14,7 +14,7 @@ export function JokerCard({ joker }: { joker: Joker }) {
       </div>
 
       <div className="mt-3 flex items-baseline justify-between gap-2 sm:mt-5 sm:gap-3">
-        <h3 className="min-w-0 text-sm font-semibold tracking-tight [overflow-wrap:anywhere] sm:text-lg">{joker.name}</h3>
+        <h3 className="min-w-0 text-sm font-semibold tracking-tight wrap-anywhere sm:text-lg">{joker.name}</h3>
         {joker.cost !== null && (
           <span className="shrink-0 font-mono text-xs sm:text-sm" aria-label={`Costs ${joker.cost} dollars`}>
             ${joker.cost}
