@@ -14,13 +14,29 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_NAME = "Aubrey's White Space";
+const DESCRIPTION =
+  "A gallery and wiki for Aubrey's White Space, a Balatro mod: browse its custom Jokers, their effects, and artwork.";
+
+// The preview image comes from src/app/opengraph-image.png (file-based metadata).
 export const metadata: Metadata = {
+  metadataBase: new URL("https://white-space-wiki.vercel.app"),
   title: {
-    default: "Aubrey's White Space · Joker Wiki",
-    template: "%s · Aubrey's White Space",
+    default: SITE_NAME,
+    template: `%s · ${SITE_NAME}`,
   },
-  description: "Every Joker in Aubrey's White Space, a Balatro mod. Synced from GitHub.",
+  description: DESCRIPTION,
   icons: { icon: "/images/favicon.ico" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
