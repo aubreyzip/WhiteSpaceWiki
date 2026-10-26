@@ -5,9 +5,9 @@ export default function Loading() {
         Loading Jokers…
       </p>
       <div className="mb-16 h-20 max-w-md animate-pulse bg-subtle" />
-      <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
+      <ul className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4" aria-hidden="true">
         {Array.from({ length: 8 }, (_, i) => (
-          <li key={i} className="h-96 animate-pulse border border-subtle bg-subtle" />
+          <li key={i} className="h-80 animate-pulse border border-subtle bg-subtle sm:h-96" />
         ))}
       </ul>
     </main>

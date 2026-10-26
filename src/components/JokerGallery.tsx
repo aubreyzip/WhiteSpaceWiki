@@ -46,7 +46,7 @@ export function JokerGallery({ jokers }: { jokers: Joker[] }) {
       </p>
 
       {visible.length > 0 ? (
-        <ul className="mt-4 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <ul className="mt-4 grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {visible.map((joker) => (
             <li key={joker.key}>
               <JokerCard joker={joker} />
