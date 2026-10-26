@@ -1,0 +1,72 @@
+/** A cropped cell of a sprite sheet, with dimensions in source pixels. */
+export interface JokerSprite {
+  url: string;
+  sheetWidth: number;
+  sheetHeight: number;
+  cellWidth: number;
+  cellHeight: number;
+  /** Cell column/row inside the sheet (Balatro `pos`). */
+  x: number;
+  y: number;
+}
+
+export interface Joker {
+  /** Short key as written in the Lua file, e.g. `forgotten_man`. */
+  key: string;
+  /** Full in-game key, e.g. `j_aws_forgotten_man`. */
+  fullKey: string;
+  /** URL segment, e.g. `forgotten-man`. */
+  slug: string;
+  name: string;
+  /** Vanilla rarities are 1–4; Steamodded also allows custom string keys. */
+  rarity: number | string | null;
+  rarityLabel: string;
+  cost: number | null;
+  /** Description lines, still containing Balatro `{C:...}` markup and `#n#` variables. */
+  text: string[];
+  /** Static values for `#1#`, `#2#`, … when the manifest provides them. */
+  vars: (string | number)[];
+  sprite: JokerSprite | null;
+  /** True when the Joker uses the mod's shared placeholder atlas. */
+  placeholderArt: boolean;
+  atlas: string | null;
+  sourcePath: string;
+  sourceUrl: string;
+}
+
+export interface ModInfo {
+  name: string;
+  description: string | null;
+  version: string | null;
+  authors: string[];
+  prefix: string;
+}
+
+export interface JokerCatalog {
+  mod: ModInfo;
+  jokers: Joker[];
+  repo: string;
+  branch: string;
+  repoUrl: string;
+  /** `manifest` = wiki/jokers.json, `lua` = extracted from Lua definitions. */
+  source: "manifest" | "lua";
+  /** Non-fatal problems found while syncing (missing art, mismatched keys…). */
+  warnings: string[];
+  syncedAt: string;
+}
+
+/** Shape of the optional `wiki/jokers.json` file in the mod repository. */
+export interface JokerManifest {
+  atlases?: { key: string; path: string; px?: number; py?: number }[];
+  jokers: {
+    key: string;
+    name: string;
+    rarity?: number | string;
+    cost?: number;
+    atlas?: string;
+    pos?: { x: number; y: number };
+    text?: string[];
+    vars?: (string | number)[];
+    source?: string;
+  }[];
+}
