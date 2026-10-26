@@ -1,5 +1,7 @@
 import { cacheLife, cacheTag } from "next/cache";
-import type { Joker, JokerCatalog, JokerManifest, JokerSprite, ModInfo } from "@/types/joker";
+import type { Joker, JokerCatalog, JokerManifest, JokerSprite, JokerVar, ModInfo } from "@/types/joker";
+import { BASE_VALUES } from "@/lib/base-values";
+import { resolveLocVars } from "@/lib/loc-vars";
 import {
   asNumber,
   asString,
@@ -109,7 +111,7 @@ interface RawJoker {
   atlas: string | null;
   pos: { x: number; y: number };
   text: string[];
-  vars: (string | number)[];
+  vars: (JokerVar | null)[];
 }
 
 function readAtlases(src: string): AtlasDef[] {
@@ -121,12 +123,14 @@ function readAtlases(src: string): AtlasDef[] {
   });
 }
 
-function readJokerTable(t: LuaTable): RawJoker | null {
+/** `src` is the Joker's file, used to resolve `loc_vars` (only when the file defines one Joker). */
+function readJokerTable(t: LuaTable, src: string | null): RawJoker | null {
   const key = asString(t.fields.key);
   if (!key) return null;
   const pos = asTable(t.fields.pos);
   const locTxt = asTable(t.fields.loc_txt);
   const rarity = t.fields.rarity;
+  const extra = asTable(asTable(t.fields.config)?.fields.extra ?? null);
   return {
     key,
     name: locTxt ? asString(locTxt.fields.name) : null,
@@ -135,7 +139,7 @@ function readJokerTable(t: LuaTable): RawJoker | null {
     atlas: asString(t.fields.atlas),
     pos: { x: (pos && asNumber(pos.fields.x)) ?? 0, y: (pos && asNumber(pos.fields.y)) ?? 0 },
     text: locTxt ? asStringList(locTxt.fields.text) : [],
-    vars: [],
+    vars: src ? resolveLocVars(src, extra?.fields ?? {}) : [],
   };
 }
 
@@ -205,7 +209,7 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
       atlas: j.atlas ?? null,
       pos: j.pos ?? { x: 0, y: 0 },
       text: j.text ?? [],
-      vars: j.vars ?? [],
+      vars: (j.vars ?? []).map((v) => (typeof v === "object" ? v : { value: v, dynamic: false })),
     }));
     atlases = manifest.atlases
       ? manifest.atlases.map((a) => ({ key: a.key, path: a.path, px: a.px ?? 71, py: a.py ?? 95 }))
@@ -223,7 +227,7 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
     rawJokers = jokerFiles.flatMap((path, i) => {
       const tables = findConstructorCalls(jokerSrcs[i], "SMODS.Joker");
       if (tables.length === 0) warnings.push(`No SMODS.Joker definition found in ${path}.`);
-      return tables.flatMap((t) => readJokerTable(t) ?? []);
+      return tables.flatMap((t) => readJokerTable(t, tables.length === 1 ? jokerSrcs[i] : null) ?? []);
     });
   }
 
@@ -246,6 +250,16 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
     const name = loc?.name ?? raw.name ?? prettify(raw.key);
     const text = loc?.text.length ? loc.text : raw.text;
     if (!text.length) warnings.push(`${name}: no description found (${fullKey}).`);
+
+    // Fill `#n#` values the code can't resolve from the documented base values; all of those change in play.
+    const varCount = Math.max(0, ...text.flatMap((line) => [...line.matchAll(/#(\d+)#/g)].map((m) => Number(m[1]))));
+    const base = BASE_VALUES[fullKey] ?? [];
+    const vars = Array.from({ length: varCount }, (_, n): JokerVar | null => {
+      if (raw.vars[n]) return raw.vars[n];
+      if (base[n] != null) return { value: base[n], dynamic: true };
+      warnings.push(`${name}: the value of #${n + 1}# is calculated in game and couldn't be determined.`);
+      return null;
+    });
 
     let sprite: JokerSprite | null = null;
     const atlasKey = raw.atlas?.replace(new RegExp(`^${mod.prefix}_`), "") ?? null;
@@ -286,7 +300,7 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
         typeof raw.rarity === "number" ? (RARITY_LABELS[raw.rarity] ?? `Rarity ${raw.rarity}`) : (raw.rarity ?? "Unknown"),
       cost: raw.cost,
       text,
-      vars: raw.vars,
+      vars,
       sprite,
       placeholderArt: atlasKey === "placeholders",
     };

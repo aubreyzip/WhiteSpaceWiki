@@ -15,7 +15,7 @@ export interface LuaTable {
   items: LuaValue[];
 }
 
-type Token =
+export type Token =
   | { type: "name"; value: string }
   | { type: "string"; value: string }
   | { type: "number"; value: number }

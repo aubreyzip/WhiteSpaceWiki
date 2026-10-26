@@ -28,6 +28,10 @@ export function JokerCard({ joker }: { joker: Joker }) {
       </p>
 
       <JokerDescription text={joker.text} vars={joker.vars} className="mt-4 text-sm leading-relaxed" />
+
+      {joker.vars.some((v) => v?.dynamic) && (
+        <p className="mt-auto pt-4 text-xs text-muted">Dotted values are starting values and change during a run.</p>
+      )}
     </article>
   );
 }

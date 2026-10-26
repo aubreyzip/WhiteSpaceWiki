@@ -50,9 +50,18 @@ The Lua reader ([`src/lib/lua.ts`](src/lib/lua.ts)) never runs code. It only kee
 
 Problems found during sync are listed under **Sync notes** at the bottom of the home page: missing art, unknown atlases, filename case mismatches, and localization keys that match no Joker. They are worth fixing in the mod too. For example, `forgotten_man.png` vs `Forgotten_man.png` works on Windows but not on Linux/macOS.
 
-### Limits of reading Lua
+### Description values (`#1#`, `#2#`, …)
 
-- `#1#`-style values are calculated in-game by `loc_vars`, so the Lua reader can't know them. They show as a dashed **?** box.
+The game fills these in at runtime through each Joker's `loc_vars` function. The wiki shows their **starting value**:
+
+1. [`src/lib/loc-vars.ts`](src/lib/loc-vars.ts) reads `loc_vars` without running it. It resolves config fields (`card.ability.extra.*`), locals, arithmetic, `math.*` and `SMODS.get_probability_vars`. A value counts as changing if it depends on a config field the Joker's code reassigns, such as Vitamins' chips or Scapegoat's shop count.
+2. Values computed from live game state (money, deck contents, the copied Joker) can't be read from config. Their starting values are listed with the code they come from in [`src/lib/base-values.ts`](src/lib/base-values.ts). Re-check an entry when that Joker's code changes.
+3. Anything still unknown shows as a dashed **?** box and gets a sync note.
+
+Values that change during a run have a dotted underline, and the card explains what that means.
+
+### Other limits of reading Lua
+
 - Values built from expressions (e.g. `cost = base + 1`) are ignored.
 
 ## Recommended: add `wiki/jokers.json` to the mod
@@ -78,7 +87,7 @@ For fully reliable data, the smallest change is one JSON file in the mod repo at
 
 - `key` and `name` are required. Everything else is optional.
 - `text` falls back to `localization/en-us.lua` when omitted.
-- `vars` fills in `#1#`, `#2#`, … with display values.
+- `vars` fills in `#1#`, `#2#`, … with display values. Use `{ "value": 1, "dynamic": true }` for a value that changes during a run.
 - `atlases` (`[{ "key", "path", "px", "py" }]`) can also be added. Otherwise `src/atlases.lua` is still used.
 
 The schema is the `JokerManifest` type in [`src/types/joker.ts`](src/types/joker.ts).

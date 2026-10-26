@@ -10,6 +10,12 @@ export interface JokerSprite {
   y: number;
 }
 
+export interface JokerVar {
+  value: string | number;
+  /** True when the value starts here but changes during a run. */
+  dynamic: boolean;
+}
+
 export interface Joker {
   /** Short key as written in the Lua file, e.g. `forgotten_man`. */
   key: string;
@@ -22,8 +28,8 @@ export interface Joker {
   cost: number | null;
   /** Description lines, still containing Balatro `{C:...}` markup and `#n#` variables. */
   text: string[];
-  /** Static values for `#1#`, `#2#`, … when the manifest provides them. */
-  vars: (string | number)[];
+  /** Starting values for `#1#`, `#2#`, …; `null` where they can't be determined. */
+  vars: (JokerVar | null)[];
   sprite: JokerSprite | null;
   /** True when the Joker uses the mod's shared placeholder atlas. */
   placeholderArt: boolean;
@@ -61,6 +67,7 @@ export interface JokerManifest {
     atlas?: string;
     pos?: { x: number; y: number };
     text?: string[];
-    vars?: (string | number)[];
+    /** Plain values are shown as fixed; use `{ "value": 1, "dynamic": true }` for values that change. */
+    vars?: (string | number | JokerVar)[];
   }[];
 }

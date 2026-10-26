@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { JokerVar } from "@/types/joker";
 
 // Balatro markup: `{C:mult}text{}` styles text, `{X:mult,C:white}` draws a filled box,
 // `{}` resets, and `#1#` is a value filled in by the game at runtime.
@@ -17,7 +18,7 @@ function classFor(style: string) {
   return "";
 }
 
-function renderLine(line: string, vars: (string | number)[]) {
+function renderLine(line: string, vars: (JokerVar | null)[]) {
   const nodes: ReactNode[] = [];
   let style = "";
   let last = 0;
@@ -36,11 +37,20 @@ function renderLine(line: string, vars: (string | number)[]) {
     if (match[1] !== undefined) {
       style = match[1];
     } else {
-      const value = vars[Number(match[2]) - 1];
+      const v = vars[Number(match[2]) - 1];
       nodes.push(
-        value !== undefined ? (
+        v ? (
           <span key={key++} className={classFor(style) || "font-semibold"}>
-            {value}
+            {v.dynamic ? (
+              <>
+                <span title="Starting value, changes during a run" className="underline decoration-dotted decoration-2 underline-offset-4">
+                  {v.value}
+                </span>
+                <span className="sr-only"> (starting value, changes during a run)</span>
+              </>
+            ) : (
+              v.value
+            )}
           </span>
         ) : (
           <span
@@ -65,7 +75,7 @@ export function JokerDescription({
   className = "",
 }: {
   text: string[];
-  vars?: (string | number)[];
+  vars?: (JokerVar | null)[];
   className?: string;
 }) {
   if (!text.length) return <p className={`text-muted italic ${className}`}>No description available.</p>;
