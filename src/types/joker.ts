@@ -15,8 +15,6 @@ export interface Joker {
   key: string;
   /** Full in-game key, e.g. `j_aws_forgotten_man`. */
   fullKey: string;
-  /** URL segment, e.g. `forgotten-man`. */
-  slug: string;
   name: string;
   /** Vanilla rarities are 1–4; Steamodded also allows custom string keys. */
   rarity: number | string | null;
@@ -29,9 +27,6 @@ export interface Joker {
   sprite: JokerSprite | null;
   /** True when the Joker uses the mod's shared placeholder atlas. */
   placeholderArt: boolean;
-  atlas: string | null;
-  sourcePath: string;
-  sourceUrl: string;
 }
 
 export interface ModInfo {
@@ -67,6 +62,5 @@ export interface JokerManifest {
     pos?: { x: number; y: number };
     text?: string[];
     vars?: (string | number)[];
-    source?: string;
   }[];
 }

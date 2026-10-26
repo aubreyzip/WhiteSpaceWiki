@@ -1,14 +1,10 @@
-import Link from "next/link";
 import type { Joker } from "@/types/joker";
 import { JokerArt } from "@/components/JokerArt";
 import { JokerDescription } from "@/components/JokerDescription";
 
 export function JokerCard({ joker }: { joker: Joker }) {
   return (
-    <Link
-      href={`/jokers/${joker.slug}`}
-      className="group flex h-full flex-col border border-foreground bg-background p-5 transition duration-200 hover:shadow-[6px_6px_0_0_var(--foreground)] focus-visible:shadow-[6px_6px_0_0_var(--foreground)] focus-visible:outline-none motion-safe:hover:-translate-y-1 motion-safe:focus-visible:-translate-y-1"
-    >
+    <article className="flex h-full flex-col border border-foreground bg-background p-5 transition duration-200 hover:shadow-[6px_6px_0_0_var(--foreground)] motion-safe:hover:-translate-y-1">
       <div className="flex justify-center bg-subtle py-6">
         <JokerArt
           sprite={joker.sprite}
@@ -32,6 +28,6 @@ export function JokerCard({ joker }: { joker: Joker }) {
       </p>
 
       <JokerDescription text={joker.text} vars={joker.vars} className="mt-4 text-sm leading-relaxed" />
-    </Link>
+    </article>
   );
 }

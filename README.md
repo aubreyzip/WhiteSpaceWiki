@@ -5,7 +5,6 @@ All Joker data and artwork are loaded from the public mod repository,
 [aubreyzip/WhiteSpace](https://github.com/aubreyzip/WhiteSpace). Nothing is hard-coded here.
 
 - Gallery with name search, rarity filters and A–Z / Z–A sorting
-- Detail pages at `/jokers/[slug]` (e.g. `/jokers/forgotten-man`)
 - Light "White Space" and dark "Black Space" themes (follows the OS setting)
 
 Built with Next.js 16 (App Router, Cache Components), TypeScript, Tailwind CSS 4 and Lucide.
@@ -71,8 +70,7 @@ For fully reliable data, the smallest change is one JSON file in the mod repo at
       "atlas": "aws_caffeine",
       "pos": { "x": 0, "y": 0 },
       "text": ["{C:green}#1# in #2#{} chance to", "retrigger each played card"],
-      "vars": [1, 3],
-      "source": "src/jokers/caffeine.lua"
+      "vars": [1, 3]
     }
   ]
 }
@@ -89,7 +87,7 @@ The schema is the `JokerManifest` type in [`src/types/joker.ts`](src/types/joker
 
 ```
 public/images/        favicon.ico, placeholder.png (fallback art)
-src/app/              layout, home page, loading/error/404, jokers/[slug] detail page
+src/app/              layout, home page, loading/error/404
 src/components/       JokerCard, JokerGallery, SearchBar, FilterBar, SiteHeader, JokerArt, JokerDescription
 src/lib/github.ts     fetching, caching and mapping of repository data
 src/lib/lua.ts        read-only Lua table reader

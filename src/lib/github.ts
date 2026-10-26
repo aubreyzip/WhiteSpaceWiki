@@ -37,7 +37,6 @@ export class GitHubError extends Error {
 }
 
 const rawUrl = (path: string) => `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${encodePath(path)}`;
-const blobUrl = (path: string) => `https://github.com/${REPO}/blob/${BRANCH}/${encodePath(path)}`;
 const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
 
 async function fetchRaw(path: string, init?: RequestInit): Promise<Response> {
@@ -111,7 +110,6 @@ interface RawJoker {
   pos: { x: number; y: number };
   text: string[];
   vars: (string | number)[];
-  sourcePath: string;
 }
 
 function readAtlases(src: string): AtlasDef[] {
@@ -123,7 +121,7 @@ function readAtlases(src: string): AtlasDef[] {
   });
 }
 
-function readJokerTable(t: LuaTable, sourcePath: string): RawJoker | null {
+function readJokerTable(t: LuaTable): RawJoker | null {
   const key = asString(t.fields.key);
   if (!key) return null;
   const pos = asTable(t.fields.pos);
@@ -138,7 +136,6 @@ function readJokerTable(t: LuaTable, sourcePath: string): RawJoker | null {
     pos: { x: (pos && asNumber(pos.fields.x)) ?? 0, y: (pos && asNumber(pos.fields.y)) ?? 0 },
     text: locTxt ? asStringList(locTxt.fields.text) : [],
     vars: [],
-    sourcePath,
   };
 }
 
@@ -153,7 +150,6 @@ function readLocalization(src: string | null): Record<string, { name: string | n
   return result;
 }
 
-const toSlug = (key: string) => key.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const prettify = (key: string) => key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 /**
@@ -210,7 +206,6 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
       pos: j.pos ?? { x: 0, y: 0 },
       text: j.text ?? [],
       vars: j.vars ?? [],
-      sourcePath: j.source ?? MANIFEST_PATH,
     }));
     atlases = manifest.atlases
       ? manifest.atlases.map((a) => ({ key: a.key, path: a.path, px: a.px ?? 71, py: a.py ?? 95 }))
@@ -228,7 +223,7 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
     rawJokers = jokerFiles.flatMap((path, i) => {
       const tables = findConstructorCalls(jokerSrcs[i], "SMODS.Joker");
       if (tables.length === 0) warnings.push(`No SMODS.Joker definition found in ${path}.`);
-      return tables.flatMap((t) => readJokerTable(t, path) ?? []);
+      return tables.flatMap((t) => readJokerTable(t) ?? []);
     });
   }
 
@@ -285,7 +280,6 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
     return {
       key: raw.key,
       fullKey,
-      slug: toSlug(raw.key),
       name,
       rarity: raw.rarity,
       rarityLabel:
@@ -295,9 +289,6 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
       vars: raw.vars,
       sprite,
       placeholderArt: atlasKey === "placeholders",
-      atlas: raw.atlas,
-      sourcePath: raw.sourcePath,
-      sourceUrl: blobUrl(raw.sourcePath),
     };
   });
 
@@ -316,9 +307,4 @@ export async function getJokerCatalog(): Promise<JokerCatalog> {
     warnings: [...new Set(warnings)],
     syncedAt: new Date().toISOString(),
   };
-}
-
-export async function getJokerBySlug(slug: string): Promise<Joker | null> {
-  const { jokers } = await getJokerCatalog();
-  return jokers.find((j) => j.slug === slug) ?? null;
 }
