@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { CATEGORIES, DEFAULT_CATEGORY, type CategoryId } from "@/lib/categories";
-import { filterAndSort, type SortOrder } from "@/lib/gallery";
+import { DEFAULT_SORT, effectiveSort, filterAndSort, sortOptionsFor, type SortOrder } from "@/lib/gallery";
 import type { CatalogSections, ContentItem } from "@/types/content";
 import { ContentCard } from "@/components/ContentCard";
 import { SearchBar } from "@/components/SearchBar";
-import { FilterBar } from "@/components/FilterBar";
+import { CategoryNav } from "@/components/CategoryNav";
+import { SortSelect } from "@/components/SortSelect";
 
 const NO_ITEMS: readonly ContentItem[] = [];
 
@@ -15,7 +16,9 @@ const emptyBox = "mt-4 border border-dashed border-foreground px-6 py-16 text-ce
 export function ContentGallery({ sections }: { sections: CatalogSections }) {
   const [category, setCategory] = useState<CategoryId>(DEFAULT_CATEGORY);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortOrder>("az");
+  // The user's choice is kept across categories; `sort` falls back to the default where it isn't offered.
+  const [requestedSort, setSort] = useState<SortOrder>(DEFAULT_SORT);
+  const sort = effectiveSort(requestedSort, category);
 
   const { label } = CATEGORIES[category];
   const section = sections[category];
@@ -28,9 +31,15 @@ export function ContentGallery({ sections }: { sections: CatalogSections }) {
         {label} gallery
       </h2>
 
-      <div className="space-y-5">
-        <SearchBar value={query} onChange={setQuery} label={label} />
-        <FilterBar category={category} onCategory={setCategory} sort={sort} onSort={setSort} />
+      {/* Category picks what's shown; search and sort then act on it, so they share one row. */}
+      <div className="space-y-4">
+        <CategoryNav category={category} onCategory={setCategory} />
+        <div role="search" aria-label={`Search and sort ${label}`} className="flex flex-col gap-3 sm:flex-row">
+          <div className="min-w-0 flex-1">
+            <SearchBar value={query} onChange={setQuery} label={label} disabled={items.length === 0} />
+          </div>
+          <SortSelect value={sort} options={sortOptionsFor(category)} onChange={setSort} disabled={items.length === 0} />
+        </div>
       </div>
 
       <p aria-live="polite" className="mt-8 font-mono text-xs uppercase tracking-[0.2em] text-muted">

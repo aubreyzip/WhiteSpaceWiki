@@ -4,7 +4,7 @@ A small, monochrome wiki for **Aubrey's White Space**, a Balatro mod.
 All Joker and Voucher data and artwork are loaded from the public mod repository,
 [aubreyzip/WhiteSpace](https://github.com/aubreyzip/WhiteSpace). Nothing is hard-coded here.
 
-- Gallery with Jokers / Vouchers categories, name search and A–Z / Z–A sorting
+- Gallery with Jokers / Vouchers categories, name search, A–Z / Z–A sorting, and rarity sorting for Jokers
 - Light "White Space" and dark "Black Space" themes (follows the OS setting)
 
 Built with Next.js 16 (App Router, Cache Components), TypeScript, Tailwind CSS 4 and Lucide.
@@ -48,7 +48,7 @@ Each category loads independently. If one fails (say, a Voucher file can't be do
 
 ## Categories
 
-Categories are registered in [`src/lib/categories.ts`](src/lib/categories.ts): label, source folder, Steamodded constructor, localization set, key prefix, manifest path and fallback art. Search and sorting use only the name, which every item has, so they work for any category.
+Categories are registered in [`src/lib/categories.ts`](src/lib/categories.ts): label, source folder, Steamodded constructor, localization set, key prefix, manifest path and fallback art. Search and the A–Z / Z–A sorts use only the name, which every item has, so they work for any category. A sort that only makes sense for one category (the Joker rarity sorts) sets `category` in `SORT_OPTIONS` in `src/lib/gallery.ts`; other categories don't offer it and fall back to A–Z.
 
 To add one (e.g. Tarot cards):
 
@@ -113,10 +113,11 @@ The schema is the `ContentManifest` type in [`src/types/content.ts`](src/types/c
 ```
 public/images/        favicon.ico, placeholder.png (fallback art)
 src/app/              layout, home page, loading/error/404
-src/components/       ContentGallery, ContentCard, CardMeta, CardArt, CardDescription, SearchBar, FilterBar, SiteHeader
+src/components/       ContentGallery, ContentCard, CardMeta, CardArt, CardDescription, CategoryNav, SearchBar, SortSelect, SiteHeader
 src/lib/categories.ts the category registry
 src/lib/github.ts     fetching, caching and mapping of repository data
-src/lib/gallery.ts    search and sorting
+src/lib/gallery.ts    search and sort options
+src/lib/rarity.ts     Joker rarity order (Common → Legendary)
 src/lib/lua.ts        read-only Lua table reader
 src/types/content.ts  item types, catalog and the manifest schema
 ```

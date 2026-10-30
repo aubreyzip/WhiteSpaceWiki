@@ -13,6 +13,7 @@ import type {
   TextVar,
 } from "@/types/content";
 import { BASE_VALUES } from "@/lib/base-values";
+import { rarityName } from "@/lib/rarity";
 import { mutatedFields, resolveLocVars } from "@/lib/loc-vars";
 import {
   asNumber,
@@ -35,8 +36,6 @@ const ATLASES_PATH = "src/atlases.lua";
 const LOCALIZATION_PATH = "localization/en-us.lua";
 const ASSETS_DIR = "assets/2x/";
 const ASSET_SCALE = 2; // assets/2x is twice the atlas `px`/`py`
-
-const RARITY_LABELS: Record<number, string> = { 1: "Common", 2: "Uncommon", 3: "Rare", 4: "Legendary" };
 
 export class GitHubError extends Error {
   constructor(
@@ -355,7 +354,7 @@ const BUILDERS: { [C in CategoryId]: (base: BaseItem, read: FieldReader, ctx: Bu
       ...base,
       category: "jokers",
       rarity,
-      rarityLabel: typeof rarity === "number" ? (RARITY_LABELS[rarity] ?? `Rarity ${rarity}`) : (rarity ?? "Unknown"),
+      rarityLabel: typeof rarity === "number" ? (rarityName(rarity) ?? `Rarity ${rarity}`) : (rarity ?? "Unknown"),
     };
   },
   vouchers: (base, read, ctx) => ({
