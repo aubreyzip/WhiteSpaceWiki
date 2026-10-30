@@ -4,9 +4,7 @@ import type {
   BaseItem,
   Catalog,
   CatalogSections,
-  ContentManifest,
   ItemOf,
-  ManifestEntry,
   ModInfo,
   Section,
   Sprite,
@@ -25,10 +23,20 @@ import {
   type ConstructorCall,
 } from "@/lib/lua";
 
+/** Fails fast on a malformed setting, since it becomes part of every request URL. */
+function setting(name: string, value: string, pattern: RegExp): string {
+  if (!pattern.test(value)) throw new Error(`${name} has an invalid format.`);
+  return value;
+}
+
 // Server-only configuration. GITHUB_TOKEN is optional and never sent to the client.
-const REPO = process.env.GITHUB_REPO || "aubreyzip/WhiteSpace";
-const BRANCH = process.env.GITHUB_BRANCH || "main";
+const REPO = setting("GITHUB_REPO", process.env.GITHUB_REPO || "aubreyzip/WhiteSpace", /^[A-Za-z0-9-]+\/[A-Za-z0-9._-]+$/);
+const BRANCH = setting("GITHUB_BRANCH", process.env.GITHUB_BRANCH || "main", /^(?!.*\.\.)[A-Za-z0-9._/-]+$/);
 const TOKEN = process.env.GITHUB_TOKEN;
+
+// Limits for anything fetched from GitHub, so a slow or oversized response can't stall or exhaust a sync.
+const FETCH_TIMEOUT_MS = 15_000;
+const MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 
 // Paths inside the mod repository (Steamodded conventions). Per-category paths live in lib/categories.ts.
 const MOD_JSON_PATH = "WhiteSpace.json";
@@ -50,16 +58,56 @@ export class GitHubError extends Error {
 const rawUrl = (path: string) => `https://raw.githubusercontent.com/${REPO}/${BRANCH}/${encodePath(path)}`;
 const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
 
+/** `fetch` with a timeout; every request to GitHub or jsDelivr goes through here. */
+const request = (url: string, init?: RequestInit) => fetch(url, { ...init, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+
+/** Reads a response body, stopping as soon as it exceeds `MAX_RESPONSE_BYTES`. */
+async function readLimited(res: Response, label: string): Promise<string> {
+  const tooLarge = () => new GitHubError(`${label} is too large to load.`);
+  if (Number(res.headers.get("content-length")) > MAX_RESPONSE_BYTES) throw tooLarge();
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 async function fetchRaw(path: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(rawUrl(path), init);
+  const res = await request(rawUrl(path), init);
   if (!res.ok && res.status !== 206) throw new GitHubError(`Could not load ${path} (HTTP ${res.status})`, res.status);
   return res;
 }
 
+const fetchText = async (path: string) => readLimited(await fetchRaw(path), path);
+
 async function fetchOptionalText(path: string, files: Set<string>): Promise<string | null> {
   if (!files.has(path)) return null;
-  return (await fetchRaw(path)).text();
+  return fetchText(path);
 }
+
+// Shape checks for JSON from GitHub, jsDelivr and the mod repository, which is all untrusted input.
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const asText = (v: unknown): string | null => (typeof v === "string" ? v : null);
+const asFinite = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const textList = (v: unknown): string[] => (Array.isArray(v) ? v : [v]).filter((x): x is string => typeof x === "string");
+const parseJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Lists every file in the repository. Uses the GitHub tree API (60 requests/hour
@@ -71,32 +119,52 @@ async function listRepoFiles(): Promise<string[]> {
 
   let githubError: string;
   try {
-    const res = await fetch(`https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`, { headers });
+    const res = await request(`https://api.github.com/repos/${REPO}/git/trees/${BRANCH}?recursive=1`, { headers });
     if (res.ok) {
-      const data = (await res.json()) as { tree: { path: string; type: string }[] };
-      return data.tree.filter((e) => e.type === "blob").map((e) => e.path);
+      const data = parseJson(await readLimited(res, "The repository file list"));
+      if (isRecord(data) && Array.isArray(data.tree)) {
+        return data.tree.flatMap((e) => (isRecord(e) && e.type === "blob" && typeof e.path === "string" ? [e.path] : []));
+      }
+      githubError = "GitHub API returned an unexpected response";
+    } else {
+      const limited = res.status === 429 || (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0");
+      if (res.status === 404) throw new GitHubError(`Repository ${REPO}@${BRANCH} was not found.`, 404);
+      githubError = limited ? "GitHub API rate limit reached" : `GitHub API returned HTTP ${res.status}`;
     }
-    const limited = res.status === 429 || (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0");
-    if (res.status === 404) throw new GitHubError(`Repository ${REPO}@${BRANCH} was not found.`, 404);
-    githubError = limited ? "GitHub API rate limit reached" : `GitHub API returned HTTP ${res.status}`;
   } catch (error) {
     if (error instanceof GitHubError) throw error;
-    githubError = `GitHub API unreachable (${(error as Error).message})`;
+    console.error("GitHub tree API request failed:", error);
+    githubError = "GitHub API unreachable";
   }
 
-  const res = await fetch(`https://data.jsdelivr.com/v1/packages/gh/${REPO}@${BRANCH}?structure=flat`);
+  const res = await request(`https://data.jsdelivr.com/v1/packages/gh/${REPO}@${BRANCH}?structure=flat`);
   if (!res.ok) {
     throw new GitHubError(`${githubError}, and the jsDelivr fallback returned HTTP ${res.status}. Try again later.`, res.status);
   }
-  const data = (await res.json()) as { files: { name: string }[] };
-  return data.files.map((f) => f.name.replace(/^\//, ""));
+  const data = parseJson(await readLimited(res, "The repository file list"));
+  if (!isRecord(data) || !Array.isArray(data.files)) {
+    throw new GitHubError(`${githubError}, and the jsDelivr fallback returned an unexpected response. Try again later.`);
+  }
+  return data.files.flatMap((f) => (isRecord(f) && typeof f.name === "string" ? [f.name.replace(/^\//, "")] : []));
 }
 
 /** Reads width/height from a PNG header with a small ranged request. */
 async function getPngSize(path: string): Promise<{ width: number; height: number } | null> {
   try {
     const res = await fetchRaw(path, { headers: { Range: "bytes=0-23" } });
-    const bytes = new Uint8Array(await res.arrayBuffer());
+    // Read only the header, even if the server ignores the Range request and sends the whole file.
+    const bytes = new Uint8Array(24);
+    let length = 0;
+    const reader = res.body?.getReader();
+    while (reader && length < 24) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const take = value.subarray(0, 24 - length);
+      bytes.set(take, length);
+      length += take.length;
+    }
+    await reader?.cancel();
+    if (length < 24) return null;
     const view = new DataView(bytes.buffer);
     if (bytes.length < 24 || view.getUint32(12) !== 0x49484452 /* IHDR */) return null;
     return { width: view.getUint32(16), height: view.getUint32(20) };
@@ -188,26 +256,30 @@ function readDefinition({ table: t, tokens }: ConstructorCall, mutated: Set<stri
   };
 }
 
-function readManifestEntry(entry: ManifestEntry): RawItem {
-  const fields: Record<string, unknown> = { ...entry };
+/** A `ManifestEntry` from parsed JSON, checked field by field; `null` when `key` or `name` is missing. */
+function readManifestEntry(entry: unknown): RawItem | null {
+  if (!isRecord(entry)) return null;
+  const key = asText(entry.key);
+  const name = asText(entry.name);
+  if (!key || !name) return null;
+  const pos = isRecord(entry.pos) ? entry.pos : {};
+  const vars = Array.isArray(entry.vars) ? entry.vars : [];
   return {
-    key: entry.key,
-    name: entry.name,
-    cost: entry.cost ?? null,
-    atlas: entry.atlas ?? null,
-    pos: entry.pos ?? { x: 0, y: 0 },
-    text: entry.text ?? [],
-    vars: (entry.vars ?? []).map((v) => (typeof v === "object" ? v : { value: v, dynamic: false })),
+    key,
+    name,
+    cost: asFinite(entry.cost),
+    atlas: asText(entry.atlas),
+    pos: { x: asFinite(pos.x) ?? 0, y: asFinite(pos.y) ?? 0 },
+    text: Array.isArray(entry.text) ? textList(entry.text) : [],
+    vars: vars.map((v): TextVar | null => {
+      const plain = asText(v) ?? asFinite(v);
+      if (plain !== null) return { value: plain, dynamic: false };
+      const value = isRecord(v) ? (asText(v.value) ?? asFinite(v.value)) : null;
+      return isRecord(v) && value !== null ? { value, dynamic: v.dynamic === true } : null;
+    }),
     read: {
-      value: (name) => {
-        const v = fields[name];
-        return typeof v === "string" || typeof v === "number" ? v : null;
-      },
-      list: (name) => {
-        const v = fields[name];
-        if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
-        return typeof v === "string" ? [v] : [];
-      },
+      value: (field) => asText(entry[field]) ?? asFinite(entry[field]),
+      list: (field) => textList(entry[field]),
     },
   };
 }
@@ -216,23 +288,27 @@ function readManifestEntry(entry: ManifestEntry): RawItem {
 async function loadRawSection(id: CategoryId, fileList: string[], files: Set<string>, warnings: string[]): Promise<RawSection> {
   const { source } = CATEGORIES[id];
 
+  // See `ContentManifest` for the expected shape; every field is checked because the file is external input.
   const manifestText = await fetchOptionalText(source.manifest, files);
   if (manifestText) {
-    let manifest: ContentManifest;
-    try {
-      manifest = JSON.parse(manifestText);
-    } catch {
-      throw new GitHubError(`${source.manifest} exists but is not valid JSON.`);
-    }
-    return {
-      items: (manifest[id] ?? []).map(readManifestEntry),
-      source: source.manifest,
-      atlases: (manifest.atlases ?? []).map((a) => ({ key: a.key, path: a.path, px: a.px ?? 71, py: a.py ?? 95 })),
-    };
+    const manifest = parseJson(manifestText);
+    if (!isRecord(manifest)) throw new GitHubError(`${source.manifest} exists but is not a valid manifest.`);
+    const entries = Array.isArray(manifest[id]) ? manifest[id] : [];
+    const items = entries.flatMap((entry, i) => {
+      const item = readManifestEntry(entry);
+      if (!item) warnings.push(`${source.manifest}: entry ${i + 1} is missing a key or name and was skipped.`);
+      return item ?? [];
+    });
+    const atlases = (Array.isArray(manifest.atlases) ? manifest.atlases : []).flatMap((a): AtlasDef[] => {
+      const key = isRecord(a) ? asText(a.key) : null;
+      const path = isRecord(a) ? asText(a.path) : null;
+      return isRecord(a) && key && path ? [{ key, path, px: asFinite(a.px) ?? 71, py: asFinite(a.py) ?? 95 }] : [];
+    });
+    return { items, source: source.manifest, atlases };
   }
 
   const paths = fileList.filter((p) => p.startsWith(source.dir) && p.endsWith(".lua")).sort();
-  const sources = await Promise.all(paths.map((p) => fetchRaw(p).then((r) => r.text())));
+  const sources = await Promise.all(paths.map(fetchText));
   const items = paths.flatMap((path, i) => {
     const calls = findConstructorCalls(sources[i], source.constructor);
     if (calls.length === 0) warnings.push(`No ${source.constructor} definition found in ${path}.`);
@@ -261,19 +337,21 @@ async function readModInfo(files: Set<string>, warnings: string[]): Promise<ModI
   const fallback: ModInfo = { name: REPO.split("/")[1], description: null, version: null, authors: [], prefix: "aws" };
   const modJson = await fetchOptionalText(MOD_JSON_PATH, files);
   if (!modJson) return fallback;
-  try {
-    const data = JSON.parse(modJson);
-    return {
-      name: data.name ?? fallback.name,
-      description: data.description ?? null,
-      version: data.version ?? null,
-      authors: Array.isArray(data.author) ? data.author : data.author ? [data.author] : [],
-      prefix: data.prefix ?? fallback.prefix,
-    };
-  } catch {
+  const data = parseJson(modJson);
+  if (!isRecord(data)) {
     warnings.push(`${MOD_JSON_PATH} is not valid JSON.`);
     return fallback;
   }
+  // The prefix becomes part of every key, so only a plain identifier is accepted.
+  const prefix = asText(data.prefix);
+  if (prefix !== null && !/^\w+$/.test(prefix)) warnings.push(`${MOD_JSON_PATH}: "prefix" is not a plain identifier; using "${fallback.prefix}".`);
+  return {
+    name: asText(data.name) ?? fallback.name,
+    description: asText(data.description),
+    version: asText(data.version) ?? asFinite(data.version)?.toString() ?? null,
+    authors: textList(data.author),
+    prefix: prefix && /^\w+$/.test(prefix) ? prefix : fallback.prefix,
+  };
 }
 
 const prettify = (key: string) => key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -333,7 +411,8 @@ function toBaseItem(id: CategoryId, raw: RawItem, ctx: BuildContext): BaseItem {
     return null;
   });
 
-  const atlasKey = raw.atlas?.replace(new RegExp(`^${ctx.mod.prefix}_`), "") ?? null;
+  const modPrefix = `${ctx.mod.prefix}_`;
+  const atlasKey = raw.atlas?.startsWith(modPrefix) ? raw.atlas.slice(modPrefix.length) : raw.atlas;
   return {
     key: raw.key,
     fullKey,
@@ -409,7 +488,9 @@ export async function getCatalog(): Promise<Catalog> {
       try {
         raw.set(id, await loadRawSection(id, fileList, files, warnings));
       } catch (error) {
-        raw.set(id, error instanceof Error ? error : new Error(String(error)));
+        // Only messages written for visitors are shown; anything else stays in the server log.
+        if (!(error instanceof GitHubError)) console.error(`Loading ${id} failed:`, error);
+        raw.set(id, error instanceof GitHubError ? error : new GitHubError("The data couldn't be read from GitHub."));
       }
     }),
   );
