@@ -211,11 +211,18 @@ class Parser {
   }
 }
 
+export interface ConstructorCall {
+  /** The literal fields of the table argument. */
+  table: LuaTable;
+  /** The table's own tokens, for reading functions such as `loc_vars` per definition. */
+  tokens: Token[];
+}
+
 /** Finds every `Namespace.Name({...})` / `Namespace.Name{...}` call and returns its table argument. */
-export function findConstructorCalls(src: string, callee: string): LuaTable[] {
+export function findConstructorCalls(src: string, callee: string): ConstructorCall[] {
   const tokens = tokenize(src);
   const parts = callee.split(".");
-  const results: LuaTable[] = [];
+  const results: ConstructorCall[] = [];
 
   for (let i = 0; i < tokens.length; i++) {
     let j = i;
@@ -237,7 +244,8 @@ export function findConstructorCalls(src: string, callee: string): LuaTable[] {
     if (brace?.type !== "symbol" || brace.value !== "{") continue;
 
     const parser = new Parser(tokens, j);
-    results.push(parser.parseTable());
+    const table = parser.parseTable();
+    results.push({ table, tokens: tokens.slice(j, parser.pos) });
     i = parser.pos;
   }
 

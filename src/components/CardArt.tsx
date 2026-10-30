@@ -1,22 +1,31 @@
 import type { CSSProperties } from "react";
-import type { JokerSprite } from "@/types/joker";
+import type { Sprite } from "@/types/content";
 
-// Grey "?" cell of the mod's placeholder sheet, served locally from public/images.
-const FALLBACK: JokerSprite = {
+// The mod's placeholder sheet, served locally from public/images; each category picks its own cell.
+const PLACEHOLDER_SHEET = {
   url: "/images/placeholder.png",
   sheetWidth: 710,
   sheetHeight: 764,
   cellWidth: 142,
   cellHeight: 190,
-  x: 3,
-  y: 1,
 };
 
 const percent = (offset: number, sheet: number, cell: number) => (sheet > cell ? (offset * 100) / (sheet - cell) : 0);
 
 /** Renders one cell of a Balatro sprite sheet, scaled to the element's width. */
-export function JokerArt({ sprite, name, className = "" }: { sprite: JokerSprite | null; name: string; className?: string }) {
-  const s = sprite ?? FALLBACK;
+export function CardArt({
+  sprite,
+  name,
+  fallbackCell,
+  className = "",
+}: {
+  sprite: Sprite | null;
+  name: string;
+  /** Placeholder cell shown when the item has no artwork. */
+  fallbackCell: { x: number; y: number };
+  className?: string;
+}) {
+  const s = sprite ?? { ...PLACEHOLDER_SHEET, ...fallbackCell };
   const style: CSSProperties = {
     aspectRatio: `${s.cellWidth} / ${s.cellHeight}`,
     backgroundImage: `url("${s.url}")`,

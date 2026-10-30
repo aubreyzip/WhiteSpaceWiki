@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { JokerVar } from "@/types/joker";
+import type { TextVar } from "@/types/content";
 
 // Balatro markup: `{C:mult}text{}` styles text, `{X:mult,C:white}` draws a filled box,
 // `{}` resets, and `#1#` is a value filled in by the game at runtime.
@@ -18,7 +18,7 @@ function classFor(style: string) {
   return "";
 }
 
-function renderLine(line: string, vars: (JokerVar | null)[]) {
+function renderLine(line: string, vars: (TextVar | null)[]) {
   const nodes: ReactNode[] = [];
   let style = "";
   let last = 0;
@@ -69,13 +69,13 @@ function renderLine(line: string, vars: (JokerVar | null)[]) {
   return nodes;
 }
 
-export function JokerDescription({
+export function CardDescription({
   text,
   vars = [],
   className = "",
 }: {
   text: string[];
-  vars?: (JokerVar | null)[];
+  vars?: (TextVar | null)[];
   className?: string;
 }) {
   if (!text.length) return <p className={`text-muted italic ${className}`}>No description available.</p>;

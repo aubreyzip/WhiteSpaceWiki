@@ -1,17 +1,17 @@
 /**
- * Works out the starting values of a Joker's description variables (`#1#`, `#2#`, …)
+ * Works out the starting values of a card's description variables (`#1#`, `#2#`, …)
  * by reading its `loc_vars` function, without running any Lua.
  *
  * Supported: literals, `card.ability.extra.<field>` (and `local extra = card.ability.extra`),
  * locals, arithmetic, `math.floor/ceil/abs/max/min` and `SMODS.get_probability_vars`.
  * Anything that reads live game state (`G.*`, helper functions, `localize`) stays unknown.
  *
- * A value is "dynamic" when it depends on a config field the Joker's code reassigns,
+ * A value is "dynamic" when it depends on a config field the card's code reassigns,
  * i.e. it starts at the config value and changes during a run.
  */
 
-import { tokenize, type LuaValue, type Token } from "@/lib/lua";
-import type { JokerVar } from "@/types/joker";
+import type { LuaValue, Token } from "@/lib/lua";
+import type { TextVar } from "@/types/content";
 
 const EXTRA = Symbol("card.ability.extra");
 type Prim = number | string | boolean | undefined | typeof EXTRA;
@@ -340,17 +340,20 @@ class Evaluator {
   }
 }
 
-/** Config fields that the Joker's code assigns to after creation. */
-function mutatedFields(src: string): Set<string> {
+/**
+ * Config fields that a file's code assigns to after creation. Scans the whole file,
+ * since helpers outside the definition (e.g. Audience's update function) can change them.
+ */
+export function mutatedFields(src: string): Set<string> {
   return new Set([...src.matchAll(/\bextra\.(\w+)\s*=(?!=)/g)].map((m) => m[1]));
 }
 
 /**
- * Resolves the starting values of `#n#` variables from a Joker file's `loc_vars`.
+ * Resolves the starting values of `#n#` variables from one definition's `loc_vars`
+ * (`tokens` are that definition's table, so files with several definitions work).
  * Returns one entry per variable; `null` where the value can't be determined.
  */
-export function resolveLocVars(src: string, extra: Record<string, LuaValue>): (JokerVar | null)[] {
-  const tokens = tokenize(src);
+export function resolveLocVars(tokens: Token[], extra: Record<string, LuaValue>, mutated: Set<string>): (TextVar | null)[] {
   const start = tokens.findIndex(
     (t, i) => isName(t, "loc_vars") && isSym(tokens[i + 1], "=") && isName(tokens[i + 2], "function"),
   );
@@ -367,7 +370,6 @@ export function resolveLocVars(src: string, extra: Record<string, LuaValue>): (J
   }
 
   const vars = new Evaluator(tokens, bodyStart, i - 1, extra).run() ?? [];
-  const mutated = mutatedFields(src);
   return vars.map(({ v, f }) =>
     typeof v === "number" || typeof v === "string" ? { value: v, dynamic: [...f].some((field) => mutated.has(field)) } : null,
   );

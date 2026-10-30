@@ -1,9 +1,14 @@
-import { getJokerCatalog } from "@/lib/github";
-import { JokerGallery } from "@/components/JokerGallery";
+import { getCatalog } from "@/lib/github";
+import { CATEGORY_LIST } from "@/lib/categories";
+import { ContentGallery } from "@/components/ContentGallery";
 
 export default async function Home() {
-  const catalog = await getJokerCatalog();
-  const { mod } = catalog;
+  const catalog = await getCatalog();
+  const { mod, sections } = catalog;
+  const sources = CATEGORY_LIST.map(({ id, label }) => {
+    const section = sections[id];
+    return `${label} from ${section.status === "ok" ? section.source : "(failed to load)"}`;
+  });
 
   return (
     <main id="main" className="mx-auto max-w-6xl px-4 py-16 sm:px-8 sm:py-24">
@@ -16,7 +21,7 @@ export default async function Home() {
         {mod.description && <p className="mt-6 text-lg leading-relaxed text-muted">{mod.description}</p>}
       </header>
 
-      <JokerGallery jokers={catalog.jokers} />
+      <ContentGallery sections={sections} />
 
       <section aria-labelledby="sync-heading" className="mt-24 border-t border-foreground pt-8 text-sm">
         <h2 id="sync-heading" className="font-mono text-xs uppercase tracking-[0.2em]">
@@ -27,8 +32,7 @@ export default async function Home() {
           <a href={catalog.repoUrl} className="underline underline-offset-4 hover:no-underline">
             {catalog.repo}
           </a>{" "}
-          @ {catalog.branch} via {catalog.source === "manifest" ? "wiki/jokers.json" : "the mod's Lua definitions"}.
-          Refreshed at most every hour.
+          @ {catalog.branch}: {sources.join(", ")}. Refreshed at most every hour.
         </p>
         {catalog.warnings.length > 0 && (
           <details className="mt-4">

@@ -1,10 +1,10 @@
 # WhiteSpaceWiki
 
 A small, monochrome wiki for **Aubrey's White Space**, a Balatro mod.
-All Joker data and artwork are loaded from the public mod repository,
+All Joker and Voucher data and artwork are loaded from the public mod repository,
 [aubreyzip/WhiteSpace](https://github.com/aubreyzip/WhiteSpace). Nothing is hard-coded here.
 
-- Gallery with name search, rarity filters and A–Z / Z–A sorting
+- Gallery with Jokers / Vouchers categories, name search and A–Z / Z–A sorting
 - Light "White Space" and dark "Black Space" themes (follows the OS setting)
 
 Built with Next.js 16 (App Router, Cache Components), TypeScript, Tailwind CSS 4 and Lucide.
@@ -35,14 +35,29 @@ Everything lives in [`src/lib/github.ts`](src/lib/github.ts):
 
 1. **List files:** one call to the GitHub tree API. If GitHub rate limits it, the code falls back to jsDelivr's mirror of the repo.
 2. **Mod info:** read from `WhiteSpace.json` (name, version, author, description, `prefix`).
-3. **Jokers:**
-   - If `wiki/jokers.json` exists, it is used as-is (see below).
-   - Otherwise every `src/jokers/*.lua` file is read and the literal fields of its `SMODS.Joker({...})` call are extracted: `key`, `atlas`, `pos`, `rarity`, `cost`, `loc_txt`.
-4. **Text:** taken from `localization/en-us.lua` (`descriptions.Joker.j_<prefix>_<key>`), falling back to the Joker's `loc_txt`.
-5. **Artwork:** the Joker's `atlas` (with the `aws_` prefix stripped) is looked up in `src/atlases.lua`. Its PNG comes from `assets/2x/`, and the cell is cropped at `pos` using `px × py` (71 × 95) at 2× scale. Each sheet's size is read from its PNG header.
-6. **Fallback art:** Jokers without resolvable art show `public/images/placeholder.png`.
+3. **Items, per category** (see [Categories](#categories)):
+   - If the category's manifest (e.g. `wiki/jokers.json`) exists, it is used as-is (see below).
+   - Otherwise every Lua file in its folder is read and the literal fields of each definition (`SMODS.Joker({...})`, `SMODS.Voucher({...})`) are extracted: `key`, `atlas`, `pos`, `cost`, `loc_txt`, plus Joker `rarity` and Voucher `requires`. A file may define several items.
+4. **Text:** taken from `localization/en-us.lua` (`descriptions.<Joker|Voucher>.<j|v>_<prefix>_<key>`), falling back to the item's `loc_txt`.
+5. **Artwork:** the item's `atlas` (with the `aws_` prefix stripped) is looked up in `src/atlases.lua`. Its PNG comes from `assets/2x/`, and the cell is cropped at `pos` using `px × py` (71 × 95) at 2× scale. Each sheet's size is read from its PNG header.
+6. **Fallback art:** items without resolvable art show a cell of `public/images/placeholder.png` chosen by their category.
 
 All requests run inside one `"use cache"` function with `cacheLife("hours")`. Pages are prerendered at build time and refreshed in the background at most once an hour, so normal traffic costs roughly one GitHub API request per hour. Raw file downloads from `raw.githubusercontent.com` don't count against the API limit.
+
+Each category loads independently. If one fails (say, a Voucher file can't be downloaded), the others still show, the failed category says so in the gallery, and the result is only cached for minutes so it retries soon. If the repository can't be listed at all, the error page is shown.
+
+## Categories
+
+Categories are registered in [`src/lib/categories.ts`](src/lib/categories.ts): label, source folder, Steamodded constructor, localization set, key prefix, manifest path and fallback art. Search and sorting use only the name, which every item has, so they work for any category.
+
+To add one (e.g. Tarot cards):
+
+1. Add an entry to `CATEGORIES` in `src/lib/categories.ts`.
+2. Add its item type to `ContentItem` in [`src/types/content.ts`](src/types/content.ts).
+3. Add a builder for its specific fields to `BUILDERS` in `src/lib/github.ts`, and list it in `sections` in `getCatalog`.
+4. Add its metadata line to [`src/components/CardMeta.tsx`](src/components/CardMeta.tsx).
+
+TypeScript reports each step that's still missing. The category button, search, sorting, empty states and card layout need no changes.
 
 The Lua reader ([`src/lib/lua.ts`](src/lib/lua.ts)) never runs code. It only keeps literal strings, numbers, booleans and tables, and skips functions and expressions. Gameplay logic can change freely without breaking the wiki.
 
@@ -66,7 +81,7 @@ Values that change during a run have a dotted underline, and the card explains w
 
 ## Recommended: add `wiki/jokers.json` to the mod
 
-For fully reliable data, the smallest change is one JSON file in the mod repo at `wiki/jokers.json`. When it exists, the wiki uses it instead of the Lua files:
+For fully reliable data, the smallest change is one JSON file per category in the mod repo: `wiki/jokers.json`, `wiki/vouchers.json`. When one exists, the wiki uses it instead of that category's Lua files. Entries go under the category's id:
 
 ```json
 {
@@ -88,19 +103,22 @@ For fully reliable data, the smallest change is one JSON file in the mod repo at
 - `key` and `name` are required. Everything else is optional.
 - `text` falls back to `localization/en-us.lua` when omitted.
 - `vars` fills in `#1#`, `#2#`, … with display values. Use `{ "value": 1, "dynamic": true }` for a value that changes during a run.
-- `atlases` (`[{ "key", "path", "px", "py" }]`) can also be added. Otherwise `src/atlases.lua` is still used.
+- `rarity` is for Jokers. Vouchers use `"requires": ["v_aws_oversupply"]` (full keys) instead.
+- `atlases` (`[{ "key", "path", "px", "py" }]`) can also be added. They're used alongside `src/atlases.lua`.
 
-The schema is the `JokerManifest` type in [`src/types/joker.ts`](src/types/joker.ts).
+The schema is the `ContentManifest` type in [`src/types/content.ts`](src/types/content.ts).
 
 ## Project structure
 
 ```
 public/images/        favicon.ico, placeholder.png (fallback art)
 src/app/              layout, home page, loading/error/404
-src/components/       JokerCard, JokerGallery, SearchBar, FilterBar, SiteHeader, JokerArt, JokerDescription
+src/components/       ContentGallery, ContentCard, CardMeta, CardArt, CardDescription, SearchBar, FilterBar, SiteHeader
+src/lib/categories.ts the category registry
 src/lib/github.ts     fetching, caching and mapping of repository data
+src/lib/gallery.ts    search and sorting
 src/lib/lua.ts        read-only Lua table reader
-src/types/joker.ts    shared types and the manifest schema
+src/types/content.ts  item types, catalog and the manifest schema
 ```
 
 Fan-made. Not affiliated with LocalThunk (Balatro) or OMOCAT (OMORI).
